@@ -192,7 +192,7 @@ if show_actuals:
     fig.add_trace(go.Scatter(x=test_dates, y=test_prices, mode='lines+markers', name='Actual',
                              line=dict(color='#2ECC71', width=3), marker=dict(size=6)))
 
-fig.add_vline(x=train_df['Date'].iloc[-1], line_dash="dot", line_color="#999",
+fig.add_vline(x=train_df['Date'].iloc[-1].isoformat(), line_dash="dot", line_color="#999",
               annotation_text="Train/Test Split", annotation_position="top right")
 
 fig.update_layout(title="Google Stock: Forecast Comparison", xaxis_title="Date",
