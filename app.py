@@ -18,7 +18,7 @@ st.title("📈 Interactive ARIMA Stock Forecaster")
 st.markdown("""
 Demonstrates advanced time series modeling on **3 years of real Google stock data**.
 
-**Features:** Multiple forecasting methods • Parameter tuning • 30-day validation • Performance metrics
+**Features:** Multiple forecasting methods • Parameter tuning • 3-month validation • Performance metrics
 """)
 
 @st.cache_data
@@ -35,25 +35,26 @@ if df is None:
     st.error("⚠️ Data not found! Run: `python3 get_data.py`")
     st.stop()
 
-train_size = len(df) - 30
+TEST_HORIZ_DAYS = 90  # 3 months
+train_size = len(df) - TEST_HORIZ_DAYS
 train_df, test_df = df.iloc[:train_size].copy(), df.iloc[train_size:].copy()
 train_prices, test_prices = train_df['Close'].values, test_df['Close'].values
 test_dates = test_df['Date'].values
 
-# Sidebar Controls
-st.sidebar.header("⚙️ Forecasting Methods")
-col1, col2 = st.sidebar.columns(2)
+# Sidebar Controls (inside an expanded expander so sidebar is visible by default)
+with st.sidebar.expander("⚙️ Forecasting Controls", expanded=True):
+    col1, col2 = st.columns(2)
 
-with col1:
-    use_arima = st.checkbox("ARIMA", value=True, help="AutoRegressive Integrated MA")
-    use_naive = st.checkbox("Naive", value=True, help="Last value")
-    use_drift = st.checkbox("Drift", value=False, help="Linear drift")
-    use_ar = st.checkbox("AR", value=False, help="Autoregressive")
+    with col1:
+        use_arima = st.checkbox("ARIMA", value=True, help="AutoRegressive Integrated MA")
+        use_naive = st.checkbox("Naive", value=True, help="Last value")
+        use_drift = st.checkbox("Drift", value=False, help="Linear drift")
+        use_ar = st.checkbox("AR", value=False, help="Autoregressive")
 
-with col2:
-    use_ma = st.checkbox("Moving Avg", value=False)
-    use_ses = st.checkbox("Exp. Smooth", value=False)
-    use_linear = st.checkbox("Linear Trend", value=False)
+    with col2:
+        use_ma = st.checkbox("Moving Avg", value=False)
+        use_ses = st.checkbox("Exp. Smooth", value=False)
+        use_linear = st.checkbox("Linear Trend", value=False)
 
 if use_arima or use_ar:
     st.sidebar.markdown("---")
@@ -80,9 +81,10 @@ if use_ses:
     alpha = st.sidebar.slider("α (smoothing)", 0.01, 0.99, 0.3, 0.01)
 
 st.sidebar.markdown("---")
-show_actuals = st.sidebar.toggle("👁️ Show Actual Values", False)
-show_conf = st.sidebar.toggle("📊 Show 95% CI", True)
-show_table = st.sidebar.toggle("📋 Show Table", True)
+# Default to showing actuals and the table (sidebar defaults)
+show_actuals = st.sidebar.checkbox("👁️ Show Actual Values", value=True)
+show_conf = st.sidebar.checkbox("📊 Show 95% CI", value=True)
+show_table = st.sidebar.checkbox("📋 Show Table", value=True)
 
 # Forecasting Functions
 def forecast_arima(data, steps, p, d, q, auto=False):
@@ -135,26 +137,26 @@ def forecast_linear(data, steps):
 forecasts, conf_ints = {}, {}
 
 if use_arima:
-    f, c = forecast_arima(train_prices, 30, p, d, q, auto=use_auto_arima)
+    f, c = forecast_arima(train_prices, TEST_HORIZ_DAYS, p, d, q, auto=use_auto_arima)
     if f is not None:
         forecast_name = 'ARIMA (Auto)' if use_auto_arima else 'ARIMA'
         forecasts[forecast_name], conf_ints[forecast_name] = f, c
 
 if use_ar:
-    f, c = forecast_ar(train_prices, 30, ar_lags if 'ar_lags' in locals() else 5)
+    f, c = forecast_ar(train_prices, TEST_HORIZ_DAYS, ar_lags if 'ar_lags' in locals() else 5)
     if f is not None:
         forecasts['AR'], conf_ints['AR'] = f, c
 
 if use_naive:
-    forecasts['Naive'], _ = forecast_naive(train_prices, 30)
+    forecasts['Naive'], _ = forecast_naive(train_prices, TEST_HORIZ_DAYS)
 if use_drift:
-    forecasts['Drift'], _ = forecast_drift(train_prices, 30)
+    forecasts['Drift'], _ = forecast_drift(train_prices, TEST_HORIZ_DAYS)
 if use_ma:
-    forecasts['MA'], _ = forecast_ma(train_prices, 30, ma_window if 'ma_window' in locals() else 20)
+    forecasts['MA'], _ = forecast_ma(train_prices, TEST_HORIZ_DAYS, ma_window if 'ma_window' in locals() else 20)
 if use_ses:
-    forecasts['SES'], _ = forecast_ses(train_prices, 30, alpha if 'alpha' in locals() else 0.3)
+    forecasts['SES'], _ = forecast_ses(train_prices, TEST_HORIZ_DAYS, alpha if 'alpha' in locals() else 0.3)
 if use_linear:
-    forecasts['Linear'], _ = forecast_linear(train_prices, 30)
+    forecasts['Linear'], _ = forecast_linear(train_prices, TEST_HORIZ_DAYS)
 
 # Calculate Metrics
 metrics = {}
@@ -225,7 +227,7 @@ st.plotly_chart(fig, use_container_width=True)
 # Forecast Table
 if show_table and forecasts:
     st.markdown("---")
-    st.subheader("📊 30-Day Forecast Values")
+    st.subheader(f"📊 {TEST_HORIZ_DAYS}-Day Forecast Values")
     table = {'Date': test_dates}
     for name, fc in forecasts.items():
         table[name] = [f"${v:.2f}" for v in fc]
@@ -234,4 +236,4 @@ if show_table and forecasts:
     st.dataframe(pd.DataFrame(table), use_container_width=True, hide_index=True)
 
 st.markdown("---")
-st.markdown("**📚 Portfolio Project** | Streamlit + Statsmodels + Plotly | 3 years GOOGL data • 30-day validation")
+st.markdown("**📚 Portfolio Project** | Streamlit + Statsmodels + Plotly | 3 years GOOGL data • 3-month validation")
