@@ -105,7 +105,7 @@ def forecast_ma(data, steps, window):
 
 def forecast_ses(data, steps, a):
     level = data[0]
-    for x in 
+    for x in data:
         level = a * x + (1-a) * level
     return np.full(steps, level), None
 
