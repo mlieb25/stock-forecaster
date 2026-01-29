@@ -6,3 +6,4 @@ statsmodels>=0.14.0
 plotly>=5.17.0
 scikit-learn>=1.3.2
 pmdarima>=2.0.4
+xgboost>=1.7.5
