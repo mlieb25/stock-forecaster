@@ -215,9 +215,6 @@ fig.update_layout(title="Google Stock: Forecast Comparison", xaxis_title="Date",
                   yaxis_title="Price (USD)", height=700, template="plotly_white",
                   hovermode="x unified", legend=dict(x=0.01, y=0.99, bgcolor="rgba(255,255,255,0.8)"))
 
-zoom_start = train_df['Date'].iloc[-90]
-fig.update_xaxes(range=[zoom_start, test_df['Date'].iloc[-1]])
-
 st.plotly_chart(fig, use_container_width=True)
 
 # Forecast Table
