@@ -83,8 +83,8 @@ if use_ses:
     alpha = st.sidebar.slider("α (smoothing)", 0.01, 0.99, 0.3, 0.01)
 
 st.sidebar.markdown("---")
-# Default to showing actuals and the table (sidebar defaults)
-show_actuals = st.sidebar.checkbox("👁️ Show Actual Values", value=True)
+# Default to hiding actuals and show table (sidebar defaults)
+show_actuals = st.sidebar.checkbox("👁️ Show Actual Values", value=False)
 show_conf = st.sidebar.checkbox("📊 Show 95% CI", value=True)
 show_table = st.sidebar.checkbox("📋 Show Table", value=True)
 
