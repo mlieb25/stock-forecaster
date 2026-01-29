@@ -6,6 +6,7 @@ import pandas as pd
 import numpy as np
 from statsmodels.tsa.arima.model import ARIMA
 from statsmodels.tsa.ar_model import AutoReg
+from pmdarima import auto_arima
 from sklearn.metrics import mean_squared_error, mean_absolute_error
 import plotly.graph_objects as go
 import warnings
@@ -57,12 +58,19 @@ with col2:
 if use_arima or use_ar:
     st.sidebar.markdown("---")
     st.sidebar.subheader("📊 ARIMA Parameters")
-    c1, c2, c3 = st.sidebar.columns(3)
-    p = c1.slider("p", 0, 10, 5, help="AR lags")
-    d = c2.slider("d", 0, 2, 1, help="Differencing")
-    q = c3.slider("q", 0, 10, 0, help="MA lags")
+    use_auto_arima = st.sidebar.checkbox("🤖 Auto ARIMA", value=False, help="Automatically determine p, d, q")
+    
+    if use_auto_arima:
+        st.sidebar.info("Auto ARIMA will find optimal parameters...")
+        p, d, q = None, None, None
+    else:
+        c1, c2, c3 = st.sidebar.columns(3)
+        p = c1.slider("p", 0, 10, 5, help="AR lags")
+        d = c2.slider("d", 0, 2, 1, help="Differencing")
+        q = c3.slider("q", 0, 10, 0, help="MA lags")
 else:
     p, d, q = 5, 1, 0
+    use_auto_arima = False
 
 if use_ar:
     ar_lags = st.sidebar.slider("AR Lags", 1, 15, 5)
@@ -77,10 +85,14 @@ show_conf = st.sidebar.toggle("📊 Show 95% CI", True)
 show_table = st.sidebar.toggle("📋 Show Table", True)
 
 # Forecasting Functions
-def forecast_arima(data, steps, p, d, q):
+def forecast_arima(data, steps, p, d, q, auto=False):
     try:
-        model = ARIMA(data, order=(p,d,q)).fit()
-        fc = model.get_forecast(steps=steps)
+        if auto:
+            model = auto_arima(data, seasonal=False, stepwise=True, trace=False)
+            fc = model.get_forecast(steps=steps)
+        else:
+            model = ARIMA(data, order=(p,d,q)).fit()
+            fc = model.get_forecast(steps=steps)
         return fc.predicted_mean.values, fc.conf_int().values
     except:
         return None, None
@@ -118,9 +130,10 @@ def forecast_linear(data, steps):
 forecasts, conf_ints = {}, {}
 
 if use_arima:
-    f, c = forecast_arima(train_prices, 30, p, d, q)
+    f, c = forecast_arima(train_prices, 30, p, d, q, auto=use_auto_arima)
     if f is not None:
-        forecasts['ARIMA'], conf_ints['ARIMA'] = f, c
+        forecast_name = 'ARIMA (Auto)' if use_auto_arima else 'ARIMA'
+        forecasts[forecast_name], conf_ints[forecast_name] = f, c
 
 if use_ar:
     f, c = forecast_ar(train_prices, 30, ar_lags if 'ar_lags' in locals() else 5)
@@ -170,7 +183,7 @@ st.markdown("---")
 st.subheader("📉 Forecast Chart")
 
 fig = go.Figure()
-colors = {'ARIMA': '#667eea', 'AR': '#764ba2', 'Naive': '#FF6B6B', 'Drift': '#FFA07A', 
+colors = {'ARIMA': '#667eea', 'ARIMA (Auto)': '#9d4edd', 'AR': '#764ba2', 'Naive': '#FF6B6B', 'Drift': '#FFA07A', 
           'MA': '#45B7D1', 'SES': '#4ECDC4', 'Linear': '#95E1D3', 'Historical': '#2C3E50'}
 
 fig.add_trace(go.Scatter(x=train_df['Date'], y=train_df['Close'], mode='lines',
