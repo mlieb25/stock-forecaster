@@ -6,7 +6,9 @@ import pandas as pd
 import numpy as np
 from statsmodels.tsa.arima.model import ARIMA
 from statsmodels.tsa.ar_model import AutoReg
+from statsmodels.tsa.statespace.sarimax import SARIMAX
 from pmdarima import auto_arima
+from xgboost import XGBRegressor
 from sklearn.metrics import mean_squared_error, mean_absolute_error
 import plotly.graph_objects as go
 import warnings
@@ -133,6 +135,32 @@ def forecast_linear(data, steps):
     coeffs = np.polyfit(np.arange(n), data, 1)
     return np.array([coeffs[0]*(n+i) + coeffs[1] for i in range(steps)]), None
 
+# XGBoost helper: create lag features
+def create_lag_features(series, nlags=10):
+    X, y = [], []
+    for i in range(nlags, len(series)):
+        X.append(series[i-nlags:i])
+        y.append(series[i])
+    return np.array(X), np.array(y)
+
+def forecast_xgb(data, steps, nlags=10):
+    try:
+        if len(data) <= nlags:
+            return None, None
+        X, y = create_lag_features(data, nlags=nlags)
+        model = XGBRegressor(n_estimators=100, max_depth=3, verbosity=0)
+        model.fit(X, y)
+        preds = []
+        window = list(data[-nlags:])
+        for _ in range(steps):
+            x = np.array(window[-nlags:]).reshape(1, -1)
+            p = float(model.predict(x))
+            preds.append(p)
+            window.append(p)
+        return np.array(preds), None
+    except Exception:
+        return None, None
+
 # Generate Forecasts
 forecasts, conf_ints = {}, {}
 
@@ -157,14 +185,28 @@ if use_ses:
     forecasts['SES'], _ = forecast_ses(train_prices, TEST_HORIZ_DAYS, alpha if 'alpha' in locals() else 0.3)
 if use_linear:
     forecasts['Linear'], _ = forecast_linear(train_prices, TEST_HORIZ_DAYS)
+# XGBoost baseline (only if package available)
+try:
+    fx, _ = forecast_xgb(train_prices, TEST_HORIZ_DAYS, nlags=10)
+    if fx is not None:
+        forecasts['XGBoost'], conf_ints['XGBoost'] = fx, None
+except Exception:
+    pass
 
-# Calculate Metrics
-metrics = {}
-for name, fc in forecasts.items():
-    rmse = np.sqrt(mean_squared_error(test_prices, fc))
-    mae = mean_absolute_error(test_prices, fc)
-    mape = np.mean(np.abs((test_prices - fc) / test_prices)) * 100
-    metrics[name] = {'RMSE': rmse, 'MAE': mae, 'MAPE': mape}
+# Model comparison: compute metrics and pick best model
+def score_forecasts(forecasts_dict):
+    metrics_local = {}
+    for name, fc in forecasts_dict.items():
+        try:
+            rmse = np.sqrt(mean_squared_error(test_prices, fc))
+            mae = mean_absolute_error(test_prices, fc)
+            mape = np.mean(np.abs((test_prices - fc) / test_prices)) * 100
+            metrics_local[name] = {'RMSE': rmse, 'MAE': mae, 'MAPE': mape}
+        except Exception:
+            continue
+    return metrics_local
+
+metrics = score_forecasts(forecasts)
 
 # Display Metrics
 st.subheader("📊 Performance Metrics")
@@ -195,6 +237,42 @@ colors = {'ARIMA': '#667eea', 'ARIMA (Auto)': '#9d4edd', 'AR': '#764ba2', 'Naive
 
 fig.add_trace(go.Scatter(x=train_df['Date'], y=train_df['Close'], mode='lines',
                          name='Historical', line=dict(color=colors['Historical'], width=2)))
+
+# If user requests a model comparison, add a control to run it (with spinner)
+if st.sidebar.button("Run Model Comparison"):
+    with st.spinner("Running models and comparing — this may take a moment..."):
+        # Re-generate forecasts using selected models (this will overwrite 'forecasts')
+        forecasts = {}
+        conf_ints = {}
+        # ARIMA/Auto
+        if use_arima:
+            f, c = forecast_arima(train_prices, TEST_HORIZ_DAYS, p, d, q, auto=use_auto_arima)
+            if f is not None:
+                forecasts['ARIMA (Auto)' if use_auto_arima else 'ARIMA'] = f
+                conf_ints['ARIMA (Auto)' if use_auto_arima else 'ARIMA'] = c
+        # SARIMAX using provided p,d,q (fallback to 5,1,0)
+        try:
+            order = (p if p is not None else 5, d if d is not None else 1, q if q is not None else 0)
+            sar = SARIMAX(train_prices, order=order, enforce_stationarity=False, enforce_invertibility=False).fit(disp=False)
+            sar_fc = sar.get_forecast(steps=TEST_HORIZ_DAYS).predicted_mean.values
+            forecasts['SARIMAX'] = sar_fc
+        except Exception:
+            pass
+        # XGBoost
+        try:
+            xg_fc, _ = forecast_xgb(train_prices, TEST_HORIZ_DAYS, nlags=10)
+            if xg_fc is not None:
+                forecasts['XGBoost'] = xg_fc
+        except Exception:
+            pass
+        # compute metrics and pick best
+        metrics = score_forecasts(forecasts)
+        if metrics:
+            best = min(metrics, key=lambda x: metrics[x]['RMSE'])
+            st.success(f"Best model (by RMSE): {best} — RMSE={metrics[best]['RMSE']:.2f}")
+        else:
+            st.error("No valid forecasts produced by the selected models.")
+
 
 for name, fc in forecasts.items():
     color = colors.get(name, '#999')
