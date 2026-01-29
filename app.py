@@ -88,20 +88,25 @@ show_table = st.sidebar.toggle("📋 Show Table", True)
 def forecast_arima(data, steps, p, d, q, auto=False):
     try:
         if auto:
+            # pmdarima's auto_arima returns an object with predict(n_periods=)
             model = auto_arima(data, seasonal=False, stepwise=True, trace=False)
-            fc = model.get_forecast(steps=steps)
+            preds = model.predict(n_periods=steps)
+            return np.asarray(preds), None
         else:
             model = ARIMA(data, order=(p,d,q)).fit()
             fc = model.get_forecast(steps=steps)
-        return fc.predicted_mean.values, fc.conf_int().values
+            return fc.predicted_mean.values, fc.conf_int().values
     except:
         return None, None
 
 def forecast_ar(data, steps, lags):
     try:
         model = AutoReg(data, lags=lags).fit()
-        fc = model.get_forecast(steps=steps)
-        return fc.predicted_mean.values, fc.conf_int().values
+        # statsmodels AutoReg results expose predict(start, end)
+        start = len(data)
+        end = start + steps - 1
+        preds = model.predict(start=start, end=end)
+        return np.asarray(preds), None
     except:
         return None, None
 
